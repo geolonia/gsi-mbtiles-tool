@@ -9,10 +9,15 @@
 
 ## 使い方
 
-`[todo]` bin を用意してnpmに公開する
+```
+npm install -g @geolonia/gsi-mbtiles-tool
+gsi-mbtiles-tool [id]
+```
+
+または
 
 ```
-yarn build && node dist/bin/run.js [id]
+npx @geolonia/gsi-mbtiles-tool [id]
 ```
 
 `[id]` には[タイル一覧](https://maps.gsi.go.jp/development/ichiran.html)の `xyz/[id]/{z}/{x}/{y}.png` の `[id]` と指します。

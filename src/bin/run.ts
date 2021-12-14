@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Command } from 'commander';
 import tilesets from '../etc/gsi_tilesets';
 import processor from '../processor';

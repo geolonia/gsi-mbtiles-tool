@@ -1,13 +1,16 @@
 {
-  "name": "gsi-mbtiles-tool",
-  "version": "1.0.0",
+  "name": "@geolonia/gsi-mbtiles-tool",
+  "version": "0.0.0",
   "main": "index.js",
   "repository": "https://github.com/geolonia/gsi-mbtiles-tool",
   "author": "Geolonia <dev@geolonia.com>",
   "license": "MIT",
   "private": false,
+  "bin": {
+    "gsi-mbtiles-tool": "dist/bin/run.js"
+  },
   "scripts": {
-    "build": "rm -r dist; tsc"
+    "build": "rm -r dist; tsc && chmod +x dist/bin/run.js"
   },
   "devDependencies": {
     "@tsconfig/node14": "^1.0.1",
@@ -24,5 +27,8 @@
     "concat-stream": "^2.0.0",
     "csv-parse": "^5.0.3",
     "sqlite3": "^5.0.2"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
