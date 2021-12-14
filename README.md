@@ -24,6 +24,8 @@ npx @geolonia/gsi-mbtiles-tool [id]
 
 現在、あらかじめメタ情報を指定する必要があるので、 `src/etc/gsi_tilesets.ts` をご確認ください。
 
+**注意**: mokuroku をメモリー内に保存するので、特にタイル数が多いタイルセットはOOMで死ぬ場合もあります。その場合、 `env NODE_OPTIONS="--max_old_space_size=10000" gsi-mbtiles-tool ...` などで領域解放できます。
+
 ## 仕組み
 
 地理院が公開しているタイルには、全て `mokuroku.csv` というファイルが公開されていて、全てのタイルやそのタイルの
