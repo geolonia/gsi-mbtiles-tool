@@ -7,6 +7,8 @@
 * [地理院タイルダウンロードツール](https://github.com/gsi-cyberjapan/tdlmn)
 * [mokuroku-spec](https://github.com/gsi-cyberjapan/mokuroku-spec)
 
+このツールはまだベータ版です。今後追加していきたい[機能や改善は GitHub Issues でご確認ください](https://github.com/geolonia/gsi-mbtiles-tool/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement)。
+
 ## 使い方
 
 ```
