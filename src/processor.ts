@@ -217,7 +217,9 @@ const processor = async (id: string, output: string) => {
   // metadataテーブル用意
   await writeMetadata(db, '_gsi_tileset_id', id);
   await writeMetadata(db, 'name', meta.name);
-  await writeMetadata(db, 'format', 'png');
+
+  const fileFormat = mokuroku[0][0].split('.')[1];
+  await writeMetadata(db, 'format', fileFormat);
   await writeMetadata(db, 'minzoom', meta.minZoom.toString());
   await writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
   await writeMetadata(db, 'version', '1');
