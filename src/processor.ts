@@ -1,47 +1,30 @@
 import async from 'async';
-import sqlite3 from 'sqlite3';
+import sqlite3 from 'better-sqlite3';
 import https from 'https';
 import zlib from 'zlib';
 import { parse as csvParse } from 'csv-parse';
-import concat from 'concat-stream';
 import { pipeline } from 'stream';
 import tilesets from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
-const sqlite3v = sqlite3.verbose();
+const initDb = (path: string) => {
+  const db = new sqlite3(path);
+  db.pragma('journal_mode = MEMORY');
+  db.exec(createDbSql);
+  return db;
+};
 
-const initDb = (path: string) => new Promise<sqlite3.Database>((res, rej) => {
-  const db = new sqlite3v.Database(path, (err) => {
-    if (err) return rej(err);
-    db.exec(createDbSql, (err) => {
-      if (err) return rej(err);
-      res(db);
-    });
-  });
-});
+const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
+  const tilesetIdRow = db.prepare('SELECT value FROM metadata WHERE name = \'_gsi_tileset_id\'').get();
+  if (tilesetIdRow?.value === id) return; // OK to proceed
+  if (tilesetIdRow) {
+    throw new Error(`この mbtiles は ${tilesetIdRow.value} と同期していますが、 ${id} と同期しようとしているので、中断します。`)
+  }
 
-const closeDb = (db: sqlite3.Database) => new Promise<void>((res, rej) => {
-  db.close((err) => {
-    if (err) return rej(err);
-    res();
-  });
-});
-
-const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => new Promise<void>((res, rej) => {
-  db.get('SELECT value FROM metadata WHERE name = \'_gsi_tileset_id\'', (err, row) => {
-    if (err) return rej(err);
-    if (row) {
-      if (row.value === id) return res();
-      return rej(`この mbtiles は ${row.value} と同期していますが、 ${id} と同期しようとしているので、中断します。`);
-    }
-
-    db.get('SELECT count(*) AS "count" FROM tiles', (err, row) => {
-      if (err) return rej(err);
-      if (row.count === 0) return res();
-      rej(`この mbtiles は既に他のタイルが入っているため、中断します。`);
-    });
-  });
-})
+  const tileCountRow = db.prepare('SELECT count(*) AS "count" FROM tiles').get();
+  if (tileCountRow?.count === 0) return; // OK to proceed
+  throw new Error(`この mbtiles は既に他のタイルが入っているため、中断します。`);
+};
 
 type MokurokuRow = [string, string, string, string];
 type MokurokuArray = MokurokuRow[];
@@ -80,13 +63,15 @@ const mokurokuUniqueTiles = (input: MokurokuArray) => {
   return output;
 }
 
-const checkImageTile = (db: sqlite3.Database, md5: string) => new Promise<boolean>((res, rej) => {
-  db.get('SELECT 1 FROM images WHERE md5 = ?', [ md5 ], (err, row) => {
-    if (err) return rej(err);
-    if (row) return res(true);
-    res(false);
-  });
-});
+let _preparedImageTileQuery: sqlite3.Statement | undefined;
+const checkImageTile = (db: sqlite3.Database, md5: string) => {
+  if (!_preparedImageTileQuery) {
+    _preparedImageTileQuery = db.prepare('SELECT 1 FROM images WHERE md5 = ?');
+  }
+  const row = _preparedImageTileQuery.get(md5);
+  if (row) return true;
+  return false;
+};
 
 const getTileData = (url: string) => new Promise<Buffer>((res, rej) => {
   https
@@ -100,26 +85,23 @@ const getTileData = (url: string) => new Promise<Buffer>((res, rej) => {
     .on('error', rej);
 });
 
-const putTileImageData = (db: sqlite3.Database, md5: string, size: number, data: Buffer) => new Promise<void>((res, rej) => {
-  db.run(
-    'INSERT INTO images (md5, tile_size, tile_data) VALUES (?, ?, ?)',
-    [ md5, size, data ],
-    (err) => {
-      if (err) return rej(err);
-      res();
-    }
-  );
-});
+let _preparedInsertTileDataQuery: sqlite3.Statement | undefined;
+const putTileImageData = (db: sqlite3.Database, md5: string, size: number, data: Buffer) => {
+  if (!_preparedInsertTileDataQuery) {
+    _preparedInsertTileDataQuery = db.prepare('INSERT INTO images (md5, tile_size, tile_data) VALUES (?, ?, ?)');
+  }
+  _preparedInsertTileDataQuery.run(md5, size, data);
+};
 
 const syncImagesTable = async (db: sqlite3.Database, id: string, um: MokurokuArray) => {
   const totalCount = um.length;
   let insertCount = 0;
   const queue = async.queue<MokurokuRow>(
     async (row) => {
-      const exists = await checkImageTile(db, row[3]);
+      const exists = checkImageTile(db, row[3]);
       if (exists) return;
       const tileData = await getTileData(`https://cyberjapandata.gsi.go.jp/xyz/${id}/${row[0]}`);
-      await putTileImageData(
+      putTileImageData(
         db,
         row[3],
         parseInt(row[2], 10),
@@ -138,22 +120,21 @@ const syncImagesTable = async (db: sqlite3.Database, id: string, um: MokurokuArr
   return insertCount;
 };
 
-const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md5: string, updated: number) => new Promise<void>((res, rej) => {
+let _preparedInsertTileRefQuery: sqlite3.Statement | undefined;
+const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md5: string, updated: number) => {
   const flippedY = y = (1 << z) - 1 - y;
-  db.run(`
-    INSERT INTO tile_ref (zoom_level, tile_column, tile_row, image_md5, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(zoom_level, tile_column, tile_row) DO UPDATE SET
-      image_md5 = excluded.image_md5,
-      updated_at = excluded.updated_at
-    WHERE updated_at <> excluded.updated_at
-  `,
-  [ z, x, flippedY, md5, updated ],
-  (err) => {
-    if (err) return rej(err);
-    res();
-  })
-});
+  if (!_preparedInsertTileRefQuery) {
+    _preparedInsertTileRefQuery = db.prepare(`
+      INSERT INTO tile_ref (zoom_level, tile_column, tile_row, image_md5, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(zoom_level, tile_column, tile_row) DO UPDATE SET
+        image_md5 = excluded.image_md5,
+        updated_at = excluded.updated_at
+      WHERE updated_at <> excluded.updated_at
+    `);
+  }
+  _preparedInsertTileRefQuery.run(z, x, flippedY, md5, updated);
+};
 
 const syncTileRefTable = async (db: sqlite3.Database, id: string, moku: MokurokuArray) => {
   let currentRow = 0;
@@ -163,7 +144,7 @@ const syncTileRefTable = async (db: sqlite3.Database, id: string, moku: Mokuroku
   }, 10_000);
   for (const row of moku) {
     const [z, x, y] = row[0].substring(0, row[0].length - 4).split('/');
-    await insertTileRef(db,
+    insertTileRef(db,
       parseInt(z, 10),
       parseInt(x, 10),
       parseInt(y, 10),
@@ -175,28 +156,23 @@ const syncTileRefTable = async (db: sqlite3.Database, id: string, moku: Mokuroku
   clearInterval(watcher);
 }
 
-const writeMetadata = (db: sqlite3.Database, name: string, value: string) => new Promise<void>((res, rej) => {
-  db.run(
+const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
+  db.prepare(
     `INSERT INTO metadata (name, value) VALUES (?, ?)
     ON CONFLICT (name) DO UPDATE SET
-      value = excluded.value`,
-    [ name, value ],
-    (err) => {
-      if (err) return rej();
-      res();
-    }
-  );
-});
+      value = excluded.value`
+  ).run(name, value);
+};
 
 const processor = async (id: string, output: string) => {
   // sqlite を用意する
-  const db = await initDb(output);
+  const db = initDb(output);
 
   const meta = tilesets[id];
   if (!meta) throw new Error(`expected ${id} to be in tilesets`);
 
   // metadataを確認する（idが一致するか確認。存在しない、かつ、tilesが空の場合は作成。設定しているが、一致しない場合はエラー。）
-  await verifyTilesetMetadata(db, id);
+  verifyTilesetMetadata(db, id);
 
   // mokuroku.csv をダウンロード
   const mokuroku = await getMokuroku(id);
@@ -215,17 +191,17 @@ const processor = async (id: string, output: string) => {
   await syncTileRefTable(db, id, mokuroku);
 
   // metadataテーブル用意
-  await writeMetadata(db, '_gsi_tileset_id', id);
-  await writeMetadata(db, 'name', meta.name);
+  writeMetadata(db, '_gsi_tileset_id', id);
+  writeMetadata(db, 'name', meta.name);
 
   const fileFormat = mokuroku[0][0].split('.')[1];
-  await writeMetadata(db, 'format', fileFormat);
-  await writeMetadata(db, 'minzoom', meta.minZoom.toString());
-  await writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
-  await writeMetadata(db, 'version', '1');
-  await writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
+  writeMetadata(db, 'format', fileFormat);
+  writeMetadata(db, 'minzoom', meta.minZoom.toString());
+  writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
+  writeMetadata(db, 'version', '1');
+  writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
 
-  await closeDb(db);
+  db.close();
 }
 
 export default processor;
