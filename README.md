@@ -4,7 +4,7 @@
 
 このツールは地理院が公開しているいくつかの資料のもとに作られています。
 
-* [地理んタイルダウンロードツール](https://github.com/gsi-cyberjapan/tdlmn)
+* [地理院タイルダウンロードツール](https://github.com/gsi-cyberjapan/tdlmn)
 * [mokuroku-spec](https://github.com/gsi-cyberjapan/mokuroku-spec)
 
 ## 使い方
