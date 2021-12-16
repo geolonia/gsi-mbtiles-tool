@@ -14,6 +14,11 @@
   dependencies:
     "@cspotcode/source-map-consumer" "0.8.0"
 
+"@mapbox/sphericalmercator@^1.2.0":
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/@mapbox/sphericalmercator/-/sphericalmercator-1.2.0.tgz#55d4896be906bfff859e22a1d72267329a0fff90"
+  integrity sha512-ZTOuuwGuMOJN+HEmG/68bSEw15HHaMWmQ5gdTsWdWsjDe56K1kGvLOK6bOSC8gWgIvEO0w6un/2Gvv1q5hJSkQ==
+
 "@tsconfig/node10@^1.0.7":
   version "1.0.8"
   resolved "https://registry.yarnpkg.com/@tsconfig/node10/-/node10-1.0.8.tgz#c1e4e80d6f964fbecb3359c43bd48b40f7cadad9"
@@ -52,6 +57,11 @@
   integrity sha512-eHE4cQPoj6ngxBZMvVf6Hw7Mh4jMW4U9lpGmS5GBPB9RYxlFg+CHaVN7ErNY4W9XfLIEn20b4VDYaIrbq0q4uA==
   dependencies:
     "@types/node" "*"
+
+"@types/mapbox__sphericalmercator@^1.1.5":
+  version "1.1.5"
+  resolved "https://registry.yarnpkg.com/@types/mapbox__sphericalmercator/-/mapbox__sphericalmercator-1.1.5.tgz#585012b742d410e419fbd7c230efa25ac0ca98c7"
+  integrity sha512-CewrUR0OooK/0aYdbrbLN3SPgCLOi4/oHCsFYkk4jjJKUzKMlvaFjaqeEoEtShrhPEbGlE1wz29W0lkNkyuxzA==
 
 "@types/node@*":
   version "16.11.12"

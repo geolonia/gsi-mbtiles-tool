@@ -2,6 +2,7 @@ import async from 'async';
 import sqlite3 from 'better-sqlite3';
 import https from 'https';
 import zlib from 'zlib';
+import SphericalMercator from '@mapbox/sphericalmercator';
 import { parse as csvParse } from 'csv-parse';
 import { pipeline } from 'stream';
 import tilesets from './etc/gsi_tilesets';
@@ -164,6 +165,33 @@ const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
   ).run(name, value);
 };
 
+const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number) => {
+  const row = db.prepare(`
+    SELECT MAX(tile_column) AS maxx,
+    MIN(tile_column) AS minx, MAX(tile_row) AS maxy,
+    MIN(tile_row) AS miny FROM tiles
+    WHERE zoom_level = ?
+  `).get(minzoom);
+  const sm = new SphericalMercator({});
+  // adapted from https://github.com/mapbox/node-mbtiles/blob/03220bc2fade2ba197ea2bab9cc44033f3a0b37e/lib/mbtiles.js#L347
+  const urTile = sm.bbox(row.maxx, row.maxy, minzoom, true);
+  const llTile = sm.bbox(row.minx, row.miny, minzoom, true);
+  const bounds = [
+    llTile[0] > -180 ? llTile[0] : -180,
+    llTile[1] > -90 ? llTile[1] : -90,
+    urTile[2] < 180 ? urTile[2] : 180,
+    urTile[3] < 90 ? urTile[3] : 90
+  ] as const;
+  const range = maxzoom - minzoom;
+  const center = [
+    (bounds[2] - bounds[0]) / 2 + bounds[0],
+    (bounds[3] - bounds[1]) / 2 + bounds[1],
+    range <= 1 ? maxzoom : Math.floor(range * 0.5) + minzoom
+  ] as const;
+  writeMetadata(db, 'bounds', bounds.join(','));
+  writeMetadata(db, 'center', center.join(','));
+}
+
 const processor = async (id: string, output: string) => {
   // sqlite を用意する
   const db = initDb(output);
@@ -200,6 +228,7 @@ const processor = async (id: string, output: string) => {
   writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
   writeMetadata(db, 'version', '1');
   writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
+  setBoundsCenter(db, meta.minZoom, meta.maxZoom);
 
   db.close();
 }
