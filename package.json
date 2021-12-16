@@ -1,6 +1,6 @@
 {
   "name": "@geolonia/gsi-mbtiles-tool",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "main": "index.js",
   "repository": "https://github.com/geolonia/gsi-mbtiles-tool",
   "author": "Geolonia <dev@geolonia.com>",
