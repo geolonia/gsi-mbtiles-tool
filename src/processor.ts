@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import SphericalMercator from '@mapbox/sphericalmercator';
 import { parse as csvParse } from 'csv-parse';
 import { pipeline } from 'stream';
-import tilesets from './etc/gsi_tilesets';
+import tilesets, { TilesetSpec } from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
 const initDb = (path: string) => {
@@ -29,7 +29,7 @@ const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
 
 type MokurokuRow = [string, string, string, string];
 type MokurokuArray = MokurokuRow[];
-const getMokuroku = (id: string) => new Promise<MokurokuArray>((res, rej) => {
+const getMokuroku = (id: string, minzoom: number, maxzoom: number) => new Promise<MokurokuArray>((res, rej) => {
   const url = `https://cyberjapandata.gsi.go.jp/xyz/${id}/mokuroku.csv.gz`;
   https.get(url, (resp) => {
     resp.on('error', rej);
@@ -45,7 +45,10 @@ const getMokuroku = (id: string) => new Promise<MokurokuArray>((res, rej) => {
     )
       .pipe(csvParser)
       .on('data', (row) => {
-        rows.push(row);
+        const zoom = parseInt(row[0].split('/', 2)[0], 10);
+        if (zoom >= minzoom && zoom <= maxzoom) {
+          rows.push(row);
+        }
       })
       .on('error', (err) => rej(err))
       .on('close', () => res(rows));
@@ -76,7 +79,13 @@ const checkImageTile = (db: sqlite3.Database, md5: string) => {
 
 const getTileData = (url: string) => new Promise<Buffer>((res, rej) => {
   https
-    .get(url, (resp) => {
+    .get(url, {
+      headers: {
+        // QGIS expects gzip-encoded vector tiles. If we don't pass this header,
+        // the tiles will not be gzipped.
+        'accept-encoding': 'gzip'
+      }
+    }, (resp) => {
       const out: Buffer[] = [];
       resp.on('data', (d) => out.push(d));
       resp.on('end', () => {
@@ -192,18 +201,15 @@ const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number)
   writeMetadata(db, 'center', center.join(','));
 }
 
-const processor = async (id: string, output: string) => {
+const processor = async (id: string, meta: TilesetSpec, output: string) => {
   // sqlite を用意する
   const db = initDb(output);
-
-  const meta = tilesets[id];
-  if (!meta) throw new Error(`expected ${id} to be in tilesets`);
 
   // metadataを確認する（idが一致するか確認。存在しない、かつ、tilesが空の場合は作成。設定しているが、一致しない場合はエラー。）
   verifyTilesetMetadata(db, id);
 
   // mokuroku.csv をダウンロード
-  const mokuroku = await getMokuroku(id);
+  const mokuroku = await getMokuroku(id, meta.minZoom, meta.maxZoom);
   console.timeLog(id, `mokuroku に ${mokuroku.length} 件のタイルが認識しました`);
   // md5でユニークをかける
   const uniqueMokuroku = mokurokuUniqueTiles(mokuroku);
