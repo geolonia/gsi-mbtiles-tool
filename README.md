@@ -22,6 +22,8 @@ gsi-mbtiles-tool [id]
 npx @geolonia/gsi-mbtiles-tool [id]
 ```
 
+詳細なオプション（出力ファイル指定、ズームレベルフィルター）は `gsi-mbtiles-tool --help` を参照してください。
+
 `[id]` には[タイル一覧](https://maps.gsi.go.jp/development/ichiran.html)の `xyz/[id]/{z}/{x}/{y}.png` の `[id]` と指します。
 
 現在、あらかじめメタ情報を指定する必要があるので、 `src/etc/gsi_tilesets.ts` をご確認ください。
