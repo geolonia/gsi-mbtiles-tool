@@ -106,10 +106,14 @@ const putTileImageData = (db: sqlite3.Database, md5: string, size: number, data:
 const syncImagesTable = async (db: sqlite3.Database, id: string, um: MokurokuArray) => {
   const totalCount = um.length;
   let insertCount = 0;
+  let skipCount = 0;
   const queue = async.queue<MokurokuRow>(
     async (row) => {
       const exists = checkImageTile(db, row[3]);
-      if (exists) return;
+      if (exists) {
+        skipCount += 1;
+        return;
+      }
       const tileData = await getTileData(`https://cyberjapandata.gsi.go.jp/xyz/${id}/${row[0]}`);
       putTileImageData(
         db,
@@ -123,7 +127,7 @@ const syncImagesTable = async (db: sqlite3.Database, id: string, um: MokurokuArr
   );
   queue.push(um);
   const watcher = setInterval(() => {
-    console.timeLog(id, `[タイルダウンロード] remaining=${queue.length()} newlyInserted=${insertCount} total=${totalCount}`);
+    console.timeLog(id, `[タイルダウンロード] remaining=${queue.length()} newlyInserted=${insertCount} skipped=${skipCount} total=${totalCount}`);
   }, 10_000);
   await queue.drain();
   clearInterval(watcher);
