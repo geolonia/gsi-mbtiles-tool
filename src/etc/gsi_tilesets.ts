@@ -15,6 +15,12 @@ const tilesets: { [id: string]: TilesetSpec } = {
     maxZoom: 16,
     type: "vector",
   },
+  "dem_png": {
+    name: "標高タイル（基盤地図情報数値標高モデル）",
+    minZoom: 1,
+    maxZoom: 14,
+    type: "raster",
+  },
   "relief": {
     name: "色別標高図",
     minZoom: 5,

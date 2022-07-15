@@ -153,9 +153,6 @@ const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md
 const syncTileRefTable = async (db: sqlite3.Database, id: string, moku: MokurokuArray) => {
   let currentRow = 0;
   const mokuLen = moku.length;
-  const watcher = setInterval(() => {
-    console.timeLog(id, `[タイル同期] current=${currentRow} total=${mokuLen}`);
-  }, 10_000);
   for (const row of moku) {
     const [z, x, y] = row[0].substring(0, row[0].length - 4).split('/');
     insertTileRef(db,
@@ -166,8 +163,11 @@ const syncTileRefTable = async (db: sqlite3.Database, id: string, moku: Mokuroku
       parseInt(row[1], 10)
     );
     currentRow += 1;
+
+    if (currentRow % 10_000 === 0) {
+      console.timeLog(id, `[タイル同期] current=${currentRow} total=${mokuLen}`);
+    }
   }
-  clearInterval(watcher);
 }
 
 const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
