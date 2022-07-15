@@ -1,8 +1,18 @@
+import { transcode as terrainRgbTranscode } from "./terrain_rgb"
+
+export type TileTransformer = (tile: Buffer) => Promise<Buffer>
+
 export interface TilesetSpec {
   name: string
   minZoom: number
   maxZoom: number
   type: "vector" | "raster"
+
+  /** `tilesets`のIDがGSI IDと一致しない時に利用（エイリアス） */
+  gsiId?: string
+
+  /** タイルデータを保存する前に処理する場合 */
+  tileTransformer?: TileTransformer
 }
 
 /**
@@ -20,6 +30,14 @@ const tilesets: { [id: string]: TilesetSpec } = {
     minZoom: 1,
     maxZoom: 14,
     type: "raster",
+  },
+  "dem_png_terrain_rgb": {
+    name: "標高タイル（基盤地図情報数値標高モデル） - Terrain RGB",
+    minZoom: 1,
+    maxZoom: 14,
+    type: "raster",
+    gsiId: "dem_png",
+    tileTransformer: terrainRgbTranscode,
   },
   "relief": {
     name: "色別標高図",
