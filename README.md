@@ -87,3 +87,11 @@ earthhillshade: 294.656ms mokuroku に 34039 件のユニークなタイルを�
 earthhillshade: 1.057s 0 件の新しいタイルを mbtiles に格納しました
 earthhillshade: 4.744s
 ```
+
+## ライセンス
+
+* MIT
+
+このリポジトリに含まれるソースコードのライセンスは MIT としますが、成果物のタイルをご利用になる場合は、測量法第２９条（複製）、第３０条（使用）に基づき国土地理院長への承認申請が必要になる可能性がありますので、ご注意ください。
+
+https://www.gsi.go.jp/LAW/2930-index.html
