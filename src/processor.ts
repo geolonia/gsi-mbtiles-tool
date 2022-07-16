@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import SphericalMercator from '@mapbox/sphericalmercator';
 import { parse as csvParse } from 'csv-parse';
 import { pipeline } from 'stream';
-import tilesets, { TilesetSpec } from './etc/gsi_tilesets';
+import tilesets, { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
 const initDb = (path: string) => {
@@ -29,8 +29,14 @@ const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
 
 type MokurokuRow = [string, string, string, string];
 type MokurokuArray = MokurokuRow[];
-const getMokuroku = (id: string, minzoom: number, maxzoom: number) => new Promise<MokurokuArray>((res, rej) => {
-  const url = `https://cyberjapandata.gsi.go.jp/xyz/${id}/mokuroku.csv.gz`;
+const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuArray>((res, rej) => {
+  const {
+    id,
+    gsiId,
+    minZoom,
+    maxZoom,
+  } = ctx;
+  const url = `https://cyberjapandata.gsi.go.jp/xyz/${gsiId}/mokuroku.csv.gz`;
   https.get(url, (resp) => {
     resp.on('error', rej);
 
@@ -46,7 +52,7 @@ const getMokuroku = (id: string, minzoom: number, maxzoom: number) => new Promis
       .pipe(csvParser)
       .on('data', (row) => {
         const zoom = parseInt(row[0].split('/', 2)[0], 10);
-        if (zoom >= minzoom && zoom <= maxzoom) {
+        if (zoom >= minZoom && zoom <= maxZoom) {
           rows.push(row);
         }
       })
@@ -103,7 +109,13 @@ const putTileImageData = (db: sqlite3.Database, md5: string, size: number, data:
   _preparedInsertTileDataQuery.run(md5, size, data);
 };
 
-const syncImagesTable = async (db: sqlite3.Database, id: string, um: MokurokuArray) => {
+const syncImagesTable = async (ctx: ProcessorCtx, um: MokurokuArray) => {
+  const {
+    db,
+    gsiId,
+    id,
+    tileTransformer,
+  } = ctx;
   const totalCount = um.length;
   let insertCount = 0;
   let skipCount = 0;
@@ -114,7 +126,10 @@ const syncImagesTable = async (db: sqlite3.Database, id: string, um: MokurokuArr
         skipCount += 1;
         return;
       }
-      const tileData = await getTileData(`https://cyberjapandata.gsi.go.jp/xyz/${id}/${row[0]}`);
+      let tileData = await getTileData(`https://cyberjapandata.gsi.go.jp/xyz/${gsiId}/${row[0]}`);
+      if (tileTransformer) {
+        tileData = await tileTransformer(tileData);
+      }
       putTileImageData(
         db,
         row[3],
@@ -150,7 +165,8 @@ const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md
   _preparedInsertTileRefQuery.run(z, x, flippedY, md5, updated);
 };
 
-const syncTileRefTable = async (db: sqlite3.Database, id: string, moku: MokurokuArray) => {
+const syncTileRefTable = async (ctx: ProcessorCtx, moku: MokurokuArray) => {
+  const { db, id } = ctx;
   let currentRow = 0;
   const mokuLen = moku.length;
   for (const row of moku) {
@@ -205,28 +221,46 @@ const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number)
   writeMetadata(db, 'center', center.join(','));
 }
 
+type ProcessorCtx = {
+  db: sqlite3.Database;
+  id: string;
+  gsiId: string;
+  minZoom: number;
+  maxZoom: number;
+  tileTransformer?: TileTransformer;
+}
+
 const processor = async (id: string, meta: TilesetSpec, output: string) => {
   // sqlite を用意する
   const db = initDb(output);
+
+  const ctx: ProcessorCtx = {
+    db,
+    id,
+    gsiId: meta.gsiId || id,
+    minZoom: meta.minZoom,
+    maxZoom: meta.maxZoom,
+    tileTransformer: meta.tileTransformer,
+  }
 
   // metadataを確認する（idが一致するか確認。存在しない、かつ、tilesが空の場合は作成。設定しているが、一致しない場合はエラー。）
   verifyTilesetMetadata(db, id);
 
   // mokuroku.csv をダウンロード
-  const mokuroku = await getMokuroku(id, meta.minZoom, meta.maxZoom);
+  const mokuroku = await getMokuroku(ctx);
   console.timeLog(id, `mokuroku に ${mokuroku.length} 件のタイルが認識しました`);
   // md5でユニークをかける
   const uniqueMokuroku = mokurokuUniqueTiles(mokuroku);
   console.timeLog(id, `mokuroku に ${uniqueMokuroku.length} 件のユニークなタイルを認識しました。`);
 
   // imagesテーブルに入っていないmd5をダウンロードし、imagesに挿入
-  const newImages = await syncImagesTable(db, id, uniqueMokuroku);
+  const newImages = await syncImagesTable(ctx, uniqueMokuroku);
   console.timeLog(id, `${newImages} 件の新しいタイルを mbtiles に格納しました`)
 
   // [TODO] mokurokuに入っていないimagesを削除（依存関係を確認する必要がある）
 
   // tile_ref と mokuroku を同期する
-  await syncTileRefTable(db, id, mokuroku);
+  await syncTileRefTable(ctx, mokuroku);
 
   // metadataテーブル用意
   writeMetadata(db, '_gsi_tileset_id', id);

@@ -14,6 +14,11 @@
   dependencies:
     "@cspotcode/source-map-consumer" "0.8.0"
 
+"@jorgeferrero/stream-to-buffer@^2.0.6":
+  version "2.0.6"
+  resolved "https://registry.yarnpkg.com/@jorgeferrero/stream-to-buffer/-/stream-to-buffer-2.0.6.tgz#0d0c22f9adb66ce5e3e6a7f7e435407ce6d71675"
+  integrity sha512-G7jiBkMwDdYADntdV/qzl9H4Lkch0RyektqXl5+KhktduP4/rE1RaTz0wKZFdC2dKo3S0JaxoUUC3uDeXmI7EQ==
+
 "@mapbox/sphericalmercator@^1.2.0":
   version "1.2.0"
   resolved "https://registry.yarnpkg.com/@mapbox/sphericalmercator/-/sphericalmercator-1.2.0.tgz#55d4896be906bfff859e22a1d72267329a0fff90"
@@ -72,6 +77,13 @@
   version "14.18.0"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-14.18.0.tgz#98df2397f6936bfbff4f089e40e06fa5dd88d32a"
   integrity sha512-0GeIl2kmVMXEnx8tg1SlG6Gg8vkqirrW752KqolYo1PHevhhZN3bhJ67qHj+bQaINhX0Ra3TlWwRvMCd9iEfNQ==
+
+"@types/pngjs@^6.0.1":
+  version "6.0.1"
+  resolved "https://registry.yarnpkg.com/@types/pngjs/-/pngjs-6.0.1.tgz#c711ec3fbbf077fed274ecccaf85dd4673130072"
+  integrity sha512-J39njbdW1U/6YyVXvC9+1iflZghP8jgRf2ndYghdJb5xL49LYDB+1EuAxfbuJ2IBbWIL3AjHPQhgaTxT3YaYeg==
+  dependencies:
+    "@types/node" "*"
 
 acorn-walk@^8.1.1:
   version "8.2.0"
@@ -411,6 +423,11 @@ once@^1.3.1, once@^1.4.0:
   integrity sha1-WDsap3WWHUsROsF9nFC6753Xa9E=
   dependencies:
     wrappy "1"
+
+pngjs@^6.0.0:
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/pngjs/-/pngjs-6.0.0.tgz#ca9e5d2aa48db0228a52c419c3308e87720da821"
+  integrity sha512-TRzzuFRRmEoSW/p1KVAmiOgPco2Irlah+bGFCeNfJXxxYGwSw7YwAOAcd7X28K/m5bjBWKsC29KyoMfHbypayg==
 
 prebuild-install@^7.0.0:
   version "7.0.0"
