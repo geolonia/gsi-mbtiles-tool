@@ -10,7 +10,7 @@ import { createDbSql } from './etc/schema';
 
 const initDb = (path: string) => {
   const db = new sqlite3(path);
-  db.pragma('journal_mode = MEMORY');
+  db.pragma('journal_mode = WAL');
   db.exec(createDbSql);
   return db;
 };
@@ -165,7 +165,7 @@ const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md
   _preparedInsertTileRefQuery.run(z, x, flippedY, md5, updated);
 };
 
-const syncTileRefTable = async (ctx: ProcessorCtx, moku: MokurokuArray) => {
+const syncTileRefTable = (ctx: ProcessorCtx, moku: MokurokuArray) => {
   const { db, id } = ctx;
   let currentRow = 0;
   const mokuLen = moku.length;
@@ -184,6 +184,27 @@ const syncTileRefTable = async (ctx: ProcessorCtx, moku: MokurokuArray) => {
       console.timeLog(id, `[タイル同期] current=${currentRow} total=${mokuLen}`);
     }
   }
+}
+
+const deleteUnusedTiles = (ctx: ProcessorCtx) => {
+  const { db, id } = ctx;
+  const unusedTiles = db.prepare(
+    `SELECT i.md5
+    FROM images i
+    LEFT JOIN tile_ref tr ON tr.image_md5 = i.md5
+    WHERE tr.image_md5 IS NULL`
+  ).all();
+  const unusedTilesCount = unusedTiles.length;
+  let currentRow = 0;
+  const deleteTileQuery = db.prepare(`DELETE FROM images WHERE md5 = ?`);
+  for (const row of unusedTiles) {
+    deleteTileQuery.run(row[0]);
+    currentRow += 1;
+    if (currentRow % 10_000 === 0) {
+      console.timeLog(id, `[タイル削除] current=${currentRow} total=${unusedTilesCount}`);
+    }
+  }
+  console.timeLog(id, `[タイル削除] 不要タイル ${currentRow} 個を削除しました`);
 }
 
 const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
@@ -260,7 +281,10 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
   // [TODO] mokurokuに入っていないimagesを削除（依存関係を確認する必要がある）
 
   // tile_ref と mokuroku を同期する
-  await syncTileRefTable(ctx, mokuroku);
+  syncTileRefTable(ctx, mokuroku);
+
+  // 使わなくなったタイルを削除する
+  deleteUnusedTiles(ctx);
 
   // metadataテーブル用意
   writeMetadata(db, '_gsi_tileset_id', id);
@@ -274,6 +298,7 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
   writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
   setBoundsCenter(db, meta.minZoom, meta.maxZoom);
 
+  db.pragma('journal_mode = DELETE');
   db.close();
 }
 
