@@ -2,3 +2,5 @@ node_modules
 dist
 yarn-error.log
 /*.mbtiles
+/*.mbtiles-shm
+/*.mbtiles-wal
