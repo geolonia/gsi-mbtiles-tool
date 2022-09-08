@@ -1,5 +1,6 @@
 import { transcode as terrainRgbTranscode } from "./terrain_rgb"
 
+export type TileZXY = [number, number, number];
 export type TileTransformer = (tile: Buffer) => Promise<Buffer>
 
 export interface TilesetSpec {
@@ -13,6 +14,9 @@ export interface TilesetSpec {
 
   /** タイルデータを保存する前に処理する場合 */
   tileTransformer?: TileTransformer
+
+  /** 他のタイルセットのmokurokuを代わりに使用する場合、このオプションを設定 */
+  mokurokuId?: string
 }
 
 /**
@@ -24,6 +28,15 @@ const tilesets: { [id: string]: TilesetSpec } = {
     minZoom: 4,
     maxZoom: 16,
     type: "vector",
+  },
+  // https://github.com/gsi-cyberjapan/optimal_bvmap
+  "experimental_bvmap-v1": {
+    name: "地理院地図Vector 最適化ベクトルタイル試験公開",
+    minZoom: 4,
+    maxZoom: 16,
+    type: "vector",
+    // experimental_bvmap-v1 の mokuroku はまだ準備できていなさそうなので、以前の mokuroku を使う
+    mokurokuId: "experimental_bvmap",
   },
   "dem_png": {
     name: "標高タイル（基盤地図情報数値標高モデル）",

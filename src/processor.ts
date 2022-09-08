@@ -31,12 +31,11 @@ type MokurokuRow = [string, string, string, string];
 type MokurokuArray = MokurokuRow[];
 const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuArray>((res, rej) => {
   const {
-    id,
-    gsiId,
+    mokurokuId,
     minZoom,
     maxZoom,
   } = ctx;
-  const url = `https://cyberjapandata.gsi.go.jp/xyz/${gsiId}/mokuroku.csv.gz`;
+  const url = `https://cyberjapandata.gsi.go.jp/xyz/${mokurokuId}/mokuroku.csv.gz`;
   https.get(url, (resp) => {
     resp.on('error', rej);
 
@@ -249,6 +248,7 @@ type ProcessorCtx = {
   minZoom: number;
   maxZoom: number;
   tileTransformer?: TileTransformer;
+  mokurokuId: string;
 }
 
 const processor = async (id: string, meta: TilesetSpec, output: string) => {
@@ -262,6 +262,7 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
     minZoom: meta.minZoom,
     maxZoom: meta.maxZoom,
     tileTransformer: meta.tileTransformer,
+    mokurokuId: meta.mokurokuId || meta.gsiId || id,
   }
 
   // metadataを確認する（idが一致するか確認。存在しない、かつ、tilesが空の場合は作成。設定しているが、一致しない場合はエラー。）
@@ -277,8 +278,6 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
   // imagesテーブルに入っていないmd5をダウンロードし、imagesに挿入
   const newImages = await syncImagesTable(ctx, uniqueMokuroku);
   console.timeLog(id, `${newImages} 件の新しいタイルを mbtiles に格納しました`)
-
-  // [TODO] mokurokuに入っていないimagesを削除（依存関係を確認する必要がある）
 
   // tile_ref と mokuroku を同期する
   syncTileRefTable(ctx, mokuroku);
