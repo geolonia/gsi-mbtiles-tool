@@ -212,23 +212,20 @@ const syncTileRefTable = (ctx: ProcessorCtx, moku: MokurokuArray) => {
 
 const deleteUnusedTiles = (ctx: ProcessorCtx) => {
   const { db, id } = ctx;
-  const unusedTiles = db.prepare(
-    `SELECT i.md5
-    FROM images i
-    LEFT JOIN tile_ref tr ON tr.image_md5 = i.md5
-    WHERE tr.image_md5 IS NULL`
-  ).all();
-  const unusedTilesCount = unusedTiles.length;
-  let currentRow = 0;
-  const deleteTileQuery = db.prepare(`DELETE FROM images WHERE md5 = ?`);
-  for (const row of unusedTiles) {
-    deleteTileQuery.run(row[0]);
-    currentRow += 1;
-    if (currentRow % 10_000 === 0) {
-      console.timeLog(id, `[タイル削除] current=${currentRow} total=${unusedTilesCount}`);
-    }
-  }
-  console.timeLog(id, `[タイル削除] 不要タイル ${currentRow} 個を削除しました`);
+  console.timeLog(id, '[タイル削除] 開始');
+  db.prepare(`
+    DELETE FROM images WHERE md5 IN (
+      SELECT i.md5
+        FROM images i
+        LEFT JOIN tile_ref tr ON tr.image_md5 = i.md5
+        WHERE tr.image_md5 IS NULL
+    );
+  `).run();
+  console.timeLog(id, `[タイル削除] 完了`);
+
+  console.timeLog(id, `[VACUUM] 開始`);
+  db.prepare('VACUUM').run();
+  console.timeLog(id, `[VACUUM] 完了`);
 }
 
 const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
