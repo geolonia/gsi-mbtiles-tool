@@ -10,7 +10,8 @@
     "gsi-mbtiles-tool": "dist/bin/run.js"
   },
   "scripts": {
-    "build": "rm -r dist; tsc && chmod +x dist/bin/run.js"
+    "build": "rm -r dist; tsc && chmod +x dist/bin/run.js",
+    "start": "ts-node src/bin/run.ts"
   },
   "devDependencies": {
     "@tsconfig/node14": "^1.0.1",
@@ -31,6 +32,7 @@
     "commander": "^8.3.0",
     "concat-stream": "^2.0.0",
     "csv-parse": "^5.0.3",
+    "dayjs": "^1.11.7",
     "pngjs": "^6.0.0"
   },
   "files": [

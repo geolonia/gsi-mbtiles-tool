@@ -3,9 +3,10 @@ import sqlite3 from 'better-sqlite3';
 import https from 'https';
 import zlib from 'zlib';
 import SphericalMercator from '@mapbox/sphericalmercator';
+import dayjs from 'dayjs';
 import { parse as csvParse } from 'csv-parse';
 import { pipeline } from 'stream';
-import tilesets, { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
+import { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
 const initDb = (path: string) => {
@@ -16,10 +17,10 @@ const initDb = (path: string) => {
 };
 
 const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
-  const tilesetIdRow = db.prepare('SELECT value FROM metadata WHERE name = \'_gsi_tileset_id\'').get();
-  if (tilesetIdRow?.value === id) return; // OK to proceed
-  if (tilesetIdRow) {
-    throw new Error(`この mbtiles は ${tilesetIdRow.value} と同期していますが、 ${id} と同期しようとしているので、中断します。`)
+  const inputTileset = getMetadata(db, '_gsi_tileset_id');
+  if (inputTileset === id) return; // OK to proceed
+  if (inputTileset) {
+    throw new Error(`この mbtiles は ${inputTileset} と同期していますが、 ${id} と同期しようとしているので、中断します。`)
   }
 
   const tileCountRow = db.prepare('SELECT count(*) AS "count" FROM tiles').get();
@@ -29,7 +30,14 @@ const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
 
 type MokurokuRow = [string, string, string, string];
 type MokurokuArray = MokurokuRow[];
-const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuArray>((res, rej) => {
+type MokurokuResp = {
+  rows: MokurokuArray,
+  lastModified: dayjs.Dayjs,
+  status: 'needsUpdate',
+} | {
+  status: 'upToDate',
+}
+const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuResp>((res, rej) => {
   const {
     mokurokuId,
     minZoom,
@@ -39,16 +47,29 @@ const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuArray>((res, rej)
   https.get(url, (resp) => {
     resp.on('error', rej);
 
+    if (resp.statusCode !== 200) {
+      return rej(new Error(`HTTP ${resp.statusCode} ${resp.statusMessage}`));
+    }
+
+    const lastModifiedStr = resp.headers['last-modified'];
+    const lastModified = lastModifiedStr ? new Date(lastModifiedStr) : new Date();
+
+    if (ctx.inputLastModified && (lastModified <= new Date(ctx.inputLastModified))) {
+      return res({
+        status: 'upToDate',
+      });
+    }
+
     const rows: MokurokuArray = [];
     const csvParser = csvParse();
     pipeline(
       resp,
       zlib.createGunzip(),
+      csvParser,
       (err) => {
         if (err) return rej(err);
-      }
+      },
     )
-      .pipe(csvParser)
       .on('data', (row) => {
         const zoom = parseInt(row[0].split('/', 2)[0], 10);
         if (zoom >= minZoom && zoom <= maxZoom) {
@@ -56,7 +77,11 @@ const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuArray>((res, rej)
         }
       })
       .on('error', (err) => rej(err))
-      .on('close', () => res(rows));
+      .on('close', () => res({
+        status: 'needsUpdate',
+        rows,
+        lastModified: dayjs(lastModified),
+      }));
   });
 });
 
@@ -214,6 +239,14 @@ const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
   ).run(name, value);
 };
 
+const getMetadata = (db: sqlite3.Database, name: string) => {
+  const row = db.prepare('SELECT value FROM metadata WHERE name = ?').get(name);
+  if (!row) {
+    return undefined;
+  }
+  return row.value as string;
+};
+
 const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number) => {
   const row = db.prepare(`
     SELECT MAX(tile_column) AS maxx,
@@ -249,11 +282,14 @@ type ProcessorCtx = {
   maxZoom: number;
   tileTransformer?: TileTransformer;
   mokurokuId: string;
+  inputLastModified?: string;
 }
 
 const processor = async (id: string, meta: TilesetSpec, output: string) => {
   // sqlite を用意する
   const db = initDb(output);
+
+  const inputLastModified = getMetadata(db, 'lastModified');
 
   const ctx: ProcessorCtx = {
     db,
@@ -263,6 +299,7 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
     maxZoom: meta.maxZoom,
     tileTransformer: meta.tileTransformer,
     mokurokuId: meta.mokurokuId || meta.gsiId || id,
+    inputLastModified,
   }
 
   // metadataを確認する（idが一致するか確認。存在しない、かつ、tilesが空の場合は作成。設定しているが、一致しない場合はエラー。）
@@ -270,9 +307,18 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
 
   // mokuroku.csv をダウンロード
   const mokuroku = await getMokuroku(ctx);
-  console.timeLog(id, `mokuroku に ${mokuroku.length} 件のタイルが認識しました`);
+
+  if (mokuroku.status === 'upToDate') {
+    console.timeLog(id, 'mbtiles が mokuroku と同期済みため、処理をスキップします。');
+    db.close();
+    return;
+  }
+
+  const mokurokuVersionStr = mokuroku.lastModified.format('YYYYMMDDHHmmss');
+
+  console.timeLog(id, `mokuroku に ${mokuroku.rows.length} 件のタイルが認識しました`);
   // md5でユニークをかける
-  const uniqueMokuroku = mokurokuUniqueTiles(mokuroku);
+  const uniqueMokuroku = mokurokuUniqueTiles(mokuroku.rows);
   console.timeLog(id, `mokuroku に ${uniqueMokuroku.length} 件のユニークなタイルを認識しました。`);
 
   // imagesテーブルに入っていないmd5をダウンロードし、imagesに挿入
@@ -280,7 +326,7 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
   console.timeLog(id, `${newImages} 件の新しいタイルを mbtiles に格納しました`)
 
   // tile_ref と mokuroku を同期する
-  syncTileRefTable(ctx, mokuroku);
+  syncTileRefTable(ctx, mokuroku.rows);
 
   // 使わなくなったタイルを削除する
   deleteUnusedTiles(ctx);
@@ -289,11 +335,12 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
   writeMetadata(db, '_gsi_tileset_id', id);
   writeMetadata(db, 'name', meta.name);
 
-  const fileFormat = mokuroku[0][0].split('.')[1];
+  const fileFormat = mokuroku.rows[0][0].split('.')[1];
   writeMetadata(db, 'format', fileFormat);
   writeMetadata(db, 'minzoom', meta.minZoom.toString());
   writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
-  writeMetadata(db, 'version', '1');
+  writeMetadata(db, 'version', `1.0.0+${mokurokuVersionStr}`);
+  writeMetadata(db, 'lastModified', mokuroku.lastModified.toISOString());
   writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
   setBoundsCenter(db, meta.minZoom, meta.maxZoom);
 
