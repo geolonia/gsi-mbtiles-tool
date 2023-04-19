@@ -282,7 +282,14 @@ type ProcessorCtx = {
   inputLastModified?: string;
 }
 
-const processor = async (id: string, meta: TilesetSpec, output: string) => {
+type ProcessorResult = {
+  updated: false;
+} | {
+  updated: true;
+  lastModified: string;
+}
+
+async function processor(id: string, meta: TilesetSpec, output: string): Promise<ProcessorResult> {
   // sqlite を用意する
   const db = initDb(output);
 
@@ -308,7 +315,7 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
   if (mokuroku.status === 'upToDate') {
     console.timeLog(id, 'mbtiles が mokuroku と同期済みため、処理をスキップします。');
     db.close();
-    return;
+    return { updated: false };
   }
 
   const mokurokuVersionStr = mokuroku.lastModified.format('YYYYMMDDHHmmss');
@@ -343,6 +350,8 @@ const processor = async (id: string, meta: TilesetSpec, output: string) => {
 
   db.pragma('journal_mode = DELETE');
   db.close();
+
+  return { updated: true, lastModified: mokuroku.lastModified.toISOString() };
 }
 
 export default processor;
