@@ -23,7 +23,7 @@ const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
     throw new Error(`この mbtiles は ${inputTileset} と同期していますが、 ${id} と同期しようとしているので、中断します。`)
   }
 
-  const tileCountRow = db.prepare('SELECT count(*) AS "count" FROM tiles').get();
+  const tileCountRow = db.prepare('SELECT count(*) AS "count" FROM tiles').get() as { count: number } | undefined;
   if (tileCountRow?.count === 0) return; // OK to proceed
   throw new Error(`この mbtiles は既に他のタイルが入っているため、中断します。`);
 };
@@ -237,7 +237,7 @@ const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
 };
 
 const getMetadata = (db: sqlite3.Database, name: string) => {
-  const row = db.prepare('SELECT value FROM metadata WHERE name = ?').get(name);
+  const row = db.prepare('SELECT value FROM metadata WHERE name = ?').get(name) as { value: string } | undefined;
   if (!row) {
     return undefined;
   }
@@ -250,7 +250,7 @@ const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number)
     MIN(tile_column) AS minx, MAX(tile_row) AS maxy,
     MIN(tile_row) AS miny FROM tiles
     WHERE zoom_level = ?
-  `).get(minzoom);
+  `).get(minzoom) as { maxx: number, minx: number, maxy: number, miny: number };
   const sm = new SphericalMercator({});
   // adapted from https://github.com/mapbox/node-mbtiles/blob/03220bc2fade2ba197ea2bab9cc44033f3a0b37e/lib/mbtiles.js#L347
   const urTile = sm.bbox(row.maxx, row.maxy, minzoom, true);
