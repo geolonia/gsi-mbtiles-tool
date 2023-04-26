@@ -9,18 +9,21 @@
   "bin": {
     "gsi-mbtiles-tool": "dist/bin/run.js"
   },
+  "engines": {
+    "node": ">=16"
+  },
   "scripts": {
     "build": "rm -r dist; tsc && chmod +x dist/bin/run.js",
     "start": "ts-node src/bin/run.ts"
   },
   "devDependencies": {
-    "@tsconfig/node14": "^1.0.3",
+    "@tsconfig/node16": "^1.0.3",
     "@types/async": "^3.2.18",
     "@types/better-sqlite3": "^7.6.4",
     "@types/cli-progress": "^3.11.0",
     "@types/concat-stream": "^2.0.0",
     "@types/mapbox__sphericalmercator": "^1.2.0",
-    "@types/node": "^14",
+    "@types/node": "^16",
     "@types/pngjs": "^6.0.1",
     "ts-node": "^10.9.1",
     "typescript": "^5.0.4"
@@ -35,7 +38,8 @@
     "concat-stream": "^2.0.0",
     "csv-parse": "^5.3.8",
     "dayjs": "^1.11.7",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "undici": "^5.22.0"
   },
   "files": [
     "dist"

@@ -1,12 +1,12 @@
 import async from 'async';
 import sqlite3 from 'better-sqlite3';
-import https from 'https';
-import zlib from 'zlib';
+import zlib from 'node:zlib';
 import SphericalMercator from '@mapbox/sphericalmercator';
 import dayjs from 'dayjs';
 import cliProgress from 'cli-progress';
+import { request } from 'undici';
 import { parse as csvParse } from 'csv-parse';
-import { pipeline } from 'stream';
+import { pipeline } from 'node:stream/promises';
 import { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
@@ -44,53 +44,51 @@ type MokurokuResp = {
 } | {
   status: 'upToDate',
 }
-const getMokuroku = (ctx: ProcessorCtx) => new Promise<MokurokuResp>((res, rej) => {
+
+async function getMokuroku(ctx: ProcessorCtx): Promise<MokurokuResp> {
   const {
     mokurokuId,
     minZoom,
     maxZoom,
   } = ctx;
   const url = `https://cyberjapandata.gsi.go.jp/xyz/${mokurokuId}/mokuroku.csv.gz`;
-  https.get(url, (resp) => {
-    resp.on('error', rej);
+  const resp = await request(url);
 
-    if (resp.statusCode !== 200) {
-      return rej(new Error(`HTTP ${resp.statusCode} ${resp.statusMessage}`));
+  if (resp.statusCode !== 200) {
+    throw new Error(`HTTP ${resp.statusCode} for ${url}`);
+  }
+
+  const lastModifiedStr = resp.headers['last-modified'];
+  const lastModified = lastModifiedStr ? new Date(lastModifiedStr as string) : new Date();
+
+  if (ctx.inputLastModified && (lastModified <= new Date(ctx.inputLastModified))) {
+    return {
+      status: 'upToDate',
+    };
+  }
+
+  const rows: MokurokuArray = [];
+  const csvParser = csvParse();
+  const pipelinePromise = pipeline(
+    resp.body,
+    zlib.createGunzip(),
+    csvParser,
+  );
+
+  for await (const row of csvParser) {
+    const zoom = parseInt(row[0].split('/', 2)[0], 10);
+    if (zoom >= minZoom && zoom <= maxZoom) {
+      rows.push(row);
     }
+  }
+  await pipelinePromise;
 
-    const lastModifiedStr = resp.headers['last-modified'];
-    const lastModified = lastModifiedStr ? new Date(lastModifiedStr) : new Date();
-
-    if (ctx.inputLastModified && (lastModified <= new Date(ctx.inputLastModified))) {
-      return res({
-        status: 'upToDate',
-      });
-    }
-
-    const rows: MokurokuArray = [];
-    const csvParser = csvParse();
-    pipeline(
-      resp,
-      zlib.createGunzip(),
-      csvParser,
-      (err) => {
-        if (err) return rej(err);
-      },
-    )
-      .on('data', (row) => {
-        const zoom = parseInt(row[0].split('/', 2)[0], 10);
-        if (zoom >= minZoom && zoom <= maxZoom) {
-          rows.push(row);
-        }
-      })
-      .on('error', (err) => rej(err))
-      .on('close', () => res({
-        status: 'needsUpdate',
-        rows,
-        lastModified: dayjs(lastModified),
-      }));
-  });
-});
+  return {
+    status: 'needsUpdate',
+    rows,
+    lastModified: dayjs(lastModified),
+  };
+};
 
 const mokurokuUniqueTiles = (input: MokurokuArray) => {
   const outputMd5s = new Set<string>([]);
@@ -114,23 +112,18 @@ const checkImageTile = (db: sqlite3.Database, md5: string) => {
   return false;
 };
 
-const getTileData = (url: string) => new Promise<Buffer>((res, rej) => {
-  https
-    .get(url, {
-      headers: {
-        // QGIS expects gzip-encoded vector tiles. If we don't pass this header,
-        // the tiles will not be gzipped.
-        'accept-encoding': 'gzip'
-      }
-    }, (resp) => {
-      const out: Buffer[] = [];
-      resp.on('data', (d) => out.push(d));
-      resp.on('end', () => {
-        res(Buffer.concat(out));
-      });
-    })
-    .on('error', rej);
-});
+async function getTileData(url: string): Promise<Buffer> {
+  const resp = await request(url);
+  if (resp.statusCode !== 200) {
+    throw new Error(`HTTP ${resp.statusCode} for ${url}`);
+  }
+
+  const out: Buffer[] = [];
+  for await (const chunk of resp.body) {
+    out.push(chunk);
+  }
+  return Buffer.concat(out);
+}
 
 let _preparedInsertTileDataQuery: sqlite3.Statement | undefined;
 const putTileImageData = (db: sqlite3.Database, md5: string, size: number, data: Buffer) => {
