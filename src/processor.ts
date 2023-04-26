@@ -11,10 +11,6 @@ import { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
 let shutdownRequested = false;
-process.on('SIGINT', () => {
-  console.log('Ctrl-C received, cleaning up...');
-  shutdownRequested = true;
-});
 
 const initDb = (path: string) => {
   const db = new sqlite3(path);
@@ -330,6 +326,12 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
     return { updated: false };
   }
 
+  const exitHandler = () => {
+    console.log('Ctrl-C received, cleaning up...');
+    shutdownRequested = true;
+  };
+  process.on('SIGINT', exitHandler);
+
   writeMetadata(db, '_gsi_tileset_id', id);
   writeMetadata(db, 'name', meta.name);
 
@@ -363,6 +365,12 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
   }
 
   db.close();
+
+  process.off('SIGINT', exitHandler);
+  if (shutdownRequested) {
+    console.timeLog(id, 'Ctrl-C が押されたため、処理を中断しました。');
+    process.exit(1);
+  }
 
   return { updated: true, lastModified: mokuroku.lastModified.toISOString() };
 }
