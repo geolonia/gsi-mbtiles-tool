@@ -4,6 +4,7 @@ import https from 'https';
 import zlib from 'zlib';
 import SphericalMercator from '@mapbox/sphericalmercator';
 import dayjs from 'dayjs';
+import cliProgress from 'cli-progress';
 import { parse as csvParse } from 'csv-parse';
 import { pipeline } from 'stream';
 import { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
@@ -171,15 +172,19 @@ const syncImagesTable = async (ctx: ProcessorCtx, um: MokurokuArray) => {
     20,
   );
   queue.push(um);
+  const bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+  bar.start(totalCount, 0);
   const watcher = setInterval(() => {
-    console.timeLog(id, `[タイルダウンロード] remaining=${queue.length()} newlyInserted=${insertCount} skipped=${skipCount} total=${totalCount}`);
+    bar.update(insertCount + skipCount);
+    // console.timeLog(id, `[タイルダウンロード] remaining=${queue.length()} newlyInserted=${insertCount} skipped=${skipCount} total=${totalCount}`);
 
     if (shutdownRequested) {
       queue.remove(() => true);
     }
-  }, 1_000);
+  }, 300);
   await queue.drain();
   clearInterval(watcher);
+  bar.stop();
   return insertCount;
 };
 
