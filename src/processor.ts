@@ -9,9 +9,15 @@ import { pipeline } from 'stream';
 import { TilesetSpec, TileTransformer } from './etc/gsi_tilesets';
 import { createDbSql } from './etc/schema';
 
+let shutdownRequested = false;
+process.on('SIGINT', () => {
+  console.log('Ctrl-C received, cleaning up...');
+  shutdownRequested = true;
+});
+
 const initDb = (path: string) => {
   const db = new sqlite3(path);
-  db.pragma('journal_mode = WAL');
+  db.pragma('journal_mode = MEMORY');
   db.exec(createDbSql);
   return db;
 };
@@ -167,7 +173,11 @@ const syncImagesTable = async (ctx: ProcessorCtx, um: MokurokuArray) => {
   queue.push(um);
   const watcher = setInterval(() => {
     console.timeLog(id, `[タイルダウンロード] remaining=${queue.length()} newlyInserted=${insertCount} skipped=${skipCount} total=${totalCount}`);
-  }, 10_000);
+
+    if (shutdownRequested) {
+      queue.remove(() => true);
+    }
+  }, 1_000);
   await queue.drain();
   clearInterval(watcher);
   return insertCount;
@@ -190,6 +200,8 @@ const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md
 };
 
 const syncTileRefTable = (ctx: ProcessorCtx, moku: MokurokuArray) => {
+  if (shutdownRequested) return;
+
   const { db, id } = ctx;
   let currentRow = 0;
   const mokuLen = moku.length;
@@ -211,6 +223,8 @@ const syncTileRefTable = (ctx: ProcessorCtx, moku: MokurokuArray) => {
 }
 
 const deleteUnusedTiles = (ctx: ProcessorCtx) => {
+  if (shutdownRequested) return;
+
   const { db, id } = ctx;
   console.timeLog(id, '[タイル削除] 開始');
   db.prepare(`
@@ -318,6 +332,9 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
     return { updated: false };
   }
 
+  writeMetadata(db, '_gsi_tileset_id', id);
+  writeMetadata(db, 'name', meta.name);
+
   const mokurokuVersionStr = mokuroku.lastModified.format('YYYYMMDDHHmmss');
 
   console.timeLog(id, `mokuroku に ${mokuroku.rows.length} 件のタイルが認識しました`);
@@ -335,20 +352,18 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
   // 使わなくなったタイルを削除する
   deleteUnusedTiles(ctx);
 
-  // metadataテーブル用意
-  writeMetadata(db, '_gsi_tileset_id', id);
-  writeMetadata(db, 'name', meta.name);
+  if (!shutdownRequested) {
+    // metadataテーブル用意
+    const fileFormat = mokuroku.rows[0][0].split('.')[1];
+    writeMetadata(db, 'format', fileFormat);
+    writeMetadata(db, 'minzoom', meta.minZoom.toString());
+    writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
+    writeMetadata(db, 'version', `1.0.0+${mokurokuVersionStr}`);
+    writeMetadata(db, 'lastModified', mokuroku.lastModified.toISOString());
+    writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
+    setBoundsCenter(db, meta.minZoom, meta.maxZoom);
+  }
 
-  const fileFormat = mokuroku.rows[0][0].split('.')[1];
-  writeMetadata(db, 'format', fileFormat);
-  writeMetadata(db, 'minzoom', meta.minZoom.toString());
-  writeMetadata(db, 'maxzoom', meta.maxZoom.toString());
-  writeMetadata(db, 'version', `1.0.0+${mokurokuVersionStr}`);
-  writeMetadata(db, 'lastModified', mokuroku.lastModified.toISOString());
-  writeMetadata(db, 'attribution', '<a href="https://www.gsi.go.jp/" target="_blank">&copy; GSI Japan</a>');
-  setBoundsCenter(db, meta.minZoom, meta.maxZoom);
-
-  db.pragma('journal_mode = DELETE');
   db.close();
 
   return { updated: true, lastModified: mokuroku.lastModified.toISOString() };

@@ -44,7 +44,9 @@ async function main() {
   await program.parseAsync(process.argv);
 };
 
-main().catch(e => {
+main().then(() => {
+  process.exit(0);
+}).catch(e => {
   console.error('An error occurred:', e);
   process.exit(1);
 });
