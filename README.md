@@ -44,7 +44,7 @@ mbtiles のファイルが既に存在する場合は、既に入っていない
 ### 新規作成時の例
 
 ```
-> yarn build && node dist/bin/run.js earthhillshade
+> npm run build && node dist/bin/run.js earthhillshade
 earthhillshade: 0.028ms Starting up 陰影起伏図（全球版）...
 earthhillshade: 437.914ms mokuroku に 87381 件のタイルが認識しました
 earthhillshade: 452.885ms mokuroku に 34039 件のユニークなタイルを認識しました。
@@ -80,7 +80,7 @@ earthhillshade: 4:00.123 (m:ss.mmm)
 ### 更新時の例
 
 ```
-> yarn build && node dist/bin/run.js earthhillshade
+> npm run build && node dist/bin/run.js earthhillshade
 earthhillshade: 0.027ms Starting up 陰影起伏図（全球版）...
 earthhillshade: 278.526ms mokuroku に 87381 件のタイルが認識しました
 earthhillshade: 294.656ms mokuroku に 34039 件のユニークなタイルを認識しました。
