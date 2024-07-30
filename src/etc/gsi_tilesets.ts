@@ -38,6 +38,24 @@ const tilesets: { [id: string]: TilesetSpec } = {
     // experimental_bvmap-v1 の mokuroku はまだ準備できていなさそうなので、以前の mokuroku を使う
     mokurokuId: "experimental_bvmap",
   },
+  "std": {
+    name: "標準地図",
+    minZoom: 0,
+    maxZoom: 18,
+    type: "raster",
+  },
+  "pale": {
+    name: "淡色地図",
+    minZoom: 5,
+    maxZoom: 18,
+    type: "raster",
+  },
+  "english": {
+    name: "English",
+    minZoom: 5,
+    maxZoom: 11,
+    type: "raster",
+  },
   "dem_png": {
     name: "標高タイル（基盤地図情報数値標高モデル）",
     minZoom: 1,
