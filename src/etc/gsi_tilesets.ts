@@ -1,4 +1,5 @@
 import { transcode as terrainRgbTranscode } from "./terrain_rgb"
+import { transcode as prettyTerrainTranscode } from "./pretty_terrain"
 
 export type TileZXY = [number, number, number];
 export type TileTransformer = (tile: Buffer) => Promise<Buffer>
@@ -69,6 +70,14 @@ const tilesets: { [id: string]: TilesetSpec } = {
     type: "raster",
     gsiId: "dem_png",
     tileTransformer: terrainRgbTranscode,
+  },
+  "dem_png_pretty_terrain": {
+    name: "標高タイル（基盤地図情報数値標高モデル） - Pretty Terrain",
+    minZoom: 1,
+    maxZoom: 12,
+    type: "raster",
+    gsiId: "dem_png",
+    tileTransformer: prettyTerrainTranscode,
   },
   "relief": {
     name: "色別標高図",
