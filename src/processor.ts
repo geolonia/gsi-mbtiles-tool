@@ -193,27 +193,52 @@ const insertTileRef = (db: Database, z: number, x: number, y: number, md5: strin
   _preparedInsertTileRefQuery.run(z, x, flippedY, md5, updated);
 };
 
+const getMaxUpdatedAt = (db: Database): number => {
+  const row = db.prepare('SELECT MAX(updated_at) AS max_updated FROM tile_ref').get() as { max_updated: number | null };
+  return row?.max_updated ?? 0;
+};
+
 const syncTileRefTable = (ctx: ProcessorCtx, moku: MokurokuArray) => {
   if (shutdownRequested) return;
 
   const { db, id } = ctx;
-  let currentRow = 0;
-  const mokuLen = moku.length;
-  for (const row of moku) {
-    const [z, x, y] = row[0].substring(0, row[0].length - 4).split('/');
-    insertTileRef(db,
-      parseInt(z, 10),
-      parseInt(x, 10),
-      parseInt(y, 10),
-      row[3],
-      parseInt(row[1], 10)
-    );
-    currentRow += 1;
 
-    if (currentRow % 10_000 === 0) {
-      console.timeLog(id, `[タイル同期] current=${currentRow} total=${mokuLen}`);
-    }
+  // 前回同期時の最大 updated_at を取得し、それより新しい行のみ処理
+  const maxUpdated = getMaxUpdatedAt(db);
+  const rowsToSync = maxUpdated > 0
+    ? moku.filter(row => parseInt(row[1], 10) > maxUpdated)
+    : moku;
+
+  const skipped = moku.length - rowsToSync.length;
+  if (skipped > 0) {
+    console.timeLog(id, `[タイル同期] ${moku.length} 件中 ${skipped} 件をスキップ（更新なし）`);
   }
+
+  if (rowsToSync.length === 0) return;
+
+  let currentRow = 0;
+  const totalRows = rowsToSync.length;
+
+  // トランザクションで一括処理
+  const syncAll = db.transaction(() => {
+    for (const row of rowsToSync) {
+      const [z, x, y] = row[0].substring(0, row[0].length - 4).split('/');
+      insertTileRef(db,
+        parseInt(z, 10),
+        parseInt(x, 10),
+        parseInt(y, 10),
+        row[3],
+        parseInt(row[1], 10)
+      );
+      currentRow += 1;
+
+      if (currentRow % 10_000 === 0) {
+        console.timeLog(id, `[タイル同期] current=${currentRow} total=${totalRows}`);
+      }
+    }
+  });
+
+  syncAll();
 }
 
 const deleteUnusedTiles = (ctx: ProcessorCtx) => {
@@ -389,6 +414,7 @@ export {
   checkImageTile,
   putTileImageData,
   insertTileRef,
+  getMaxUpdatedAt,
   syncTileRefTable,
   deleteUnusedTiles,
   getMokuroku,
