@@ -322,6 +322,7 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
 
   if (mokuroku.status === 'upToDate') {
     console.timeLog(id, 'mbtiles が mokuroku と同期済みため、処理をスキップします。');
+    _resetPreparedStatements();
     db.close();
     return { updated: false };
   }
@@ -364,6 +365,7 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
     setBoundsCenter(db, meta.minZoom, meta.maxZoom);
   }
 
+  _resetPreparedStatements();
   db.close();
 
   process.off('SIGINT', exitHandler);
