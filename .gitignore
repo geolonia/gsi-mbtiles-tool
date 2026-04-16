@@ -4,3 +4,4 @@ yarn-error.log
 /*.mbtiles
 /*.mbtiles-shm
 /*.mbtiles-wal
+coverage/

@@ -10,36 +10,41 @@
     "gsi-mbtiles-tool": "dist/bin/run.js"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=22"
   },
   "scripts": {
-    "build": "rm -r dist; tsc && chmod +x dist/bin/run.js",
-    "start": "ts-node src/bin/run.ts"
+    "build": "rm -rf dist; tsc && chmod +x dist/bin/run.js",
+    "start": "ts-node src/bin/run.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "@tsconfig/node16": "^1.0.3",
-    "@types/async": "^3.2.20",
-    "@types/better-sqlite3": "^7.6.4",
-    "@types/cli-progress": "^3.11.0",
-    "@types/concat-stream": "^2.0.0",
-    "@types/mapbox__sphericalmercator": "^1.2.0",
-    "@types/node": "^16",
-    "@types/pngjs": "^6.0.1",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.2.2"
+    "@tsconfig/node22": "^22.0.1",
+    "@types/async": "^3.2.25",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cli-progress": "^3.11.6",
+    "@types/concat-stream": "^2.0.3",
+    "@types/mapbox__sphericalmercator": "^1.2.3",
+    "@types/node": "^25",
+    "@types/pngjs": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   },
   "dependencies": {
     "@jorgeferrero/stream-to-buffer": "^2.0.6",
-    "@mapbox/sphericalmercator": "^1.2.0",
-    "async": "^3.2.2",
-    "better-sqlite3": "^8.5.2",
+    "@mapbox/sphericalmercator": "^2.0.2",
+    "async": "^3.2.6",
+    "better-sqlite3": "^12.9.0",
     "cli-progress": "^3.12.0",
-    "commander": "^10.0.1",
+    "commander": "^14.0.3",
     "concat-stream": "^2.0.0",
-    "csv-parse": "^5.5.0",
-    "dayjs": "^1.11.9",
+    "csv-parse": "^6.2.1",
+    "dayjs": "^1.11.20",
     "pngjs": "^7.0.0",
-    "undici": "^5.23.0"
+    "undici": "^8.1.0"
   },
   "files": [
     "dist"

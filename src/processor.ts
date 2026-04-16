@@ -1,7 +1,7 @@
 import async from 'async';
-import sqlite3 from 'better-sqlite3';
+import sqlite3, { type Database, type Statement } from 'better-sqlite3';
 import zlib from 'node:zlib';
-import SphericalMercator from '@mapbox/sphericalmercator';
+import { SphericalMercator } from '@mapbox/sphericalmercator';
 import dayjs from 'dayjs';
 import cliProgress from 'cli-progress';
 import { request } from 'undici';
@@ -12,14 +12,14 @@ import { createDbSql } from './etc/schema';
 
 let shutdownRequested = false;
 
-const initDb = (path: string) => {
+const initDb = (path: string): Database => {
   const db = new sqlite3(path);
   db.pragma('journal_mode = MEMORY');
   db.exec(createDbSql);
   return db;
 };
 
-const verifyTilesetMetadata = (db: sqlite3.Database, id: string) => {
+const verifyTilesetMetadata = (db: Database, id: string) => {
   const inputTileset = getMetadata(db, '_gsi_tileset_id');
   if (inputTileset === id) return; // OK to proceed
   if (inputTileset) {
@@ -98,8 +98,8 @@ const mokurokuUniqueTiles = (input: MokurokuArray) => {
   return output;
 }
 
-let _preparedImageTileQuery: sqlite3.Statement | undefined;
-const checkImageTile = (db: sqlite3.Database, md5: string) => {
+let _preparedImageTileQuery: Statement | undefined;
+const checkImageTile = (db: Database, md5: string) => {
   if (!_preparedImageTileQuery) {
     _preparedImageTileQuery = db.prepare('SELECT 1 FROM images WHERE md5 = ?');
   }
@@ -121,8 +121,8 @@ async function getTileData(url: string): Promise<Buffer> {
   return Buffer.concat(out);
 }
 
-let _preparedInsertTileDataQuery: sqlite3.Statement | undefined;
-const putTileImageData = (db: sqlite3.Database, md5: string, size: number, data: Buffer) => {
+let _preparedInsertTileDataQuery: Statement | undefined;
+const putTileImageData = (db: Database, md5: string, size: number, data: Buffer) => {
   if (!_preparedInsertTileDataQuery) {
     _preparedInsertTileDataQuery = db.prepare('INSERT INTO images (md5, tile_size, tile_data) VALUES (?, ?, ?)');
   }
@@ -177,8 +177,8 @@ const syncImagesTable = async (ctx: ProcessorCtx, um: MokurokuArray) => {
   return insertCount;
 };
 
-let _preparedInsertTileRefQuery: sqlite3.Statement | undefined;
-const insertTileRef = (db: sqlite3.Database, z: number, x: number, y: number, md5: string, updated: number) => {
+let _preparedInsertTileRefQuery: Statement | undefined;
+const insertTileRef = (db: Database, z: number, x: number, y: number, md5: string, updated: number) => {
   const flippedY = y = (1 << z) - 1 - y;
   if (!_preparedInsertTileRefQuery) {
     _preparedInsertTileRefQuery = db.prepare(`
@@ -236,7 +236,7 @@ const deleteUnusedTiles = (ctx: ProcessorCtx) => {
   console.timeLog(id, `[VACUUM] 完了`);
 }
 
-const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
+const writeMetadata = (db: Database, name: string, value: string) => {
   db.prepare(
     `INSERT INTO metadata (name, value) VALUES (?, ?)
     ON CONFLICT (name) DO UPDATE SET
@@ -244,7 +244,7 @@ const writeMetadata = (db: sqlite3.Database, name: string, value: string) => {
   ).run(name, value);
 };
 
-const getMetadata = (db: sqlite3.Database, name: string) => {
+const getMetadata = (db: Database, name: string): string | undefined => {
   const row = db.prepare('SELECT value FROM metadata WHERE name = ?').get(name) as { value: string } | undefined;
   if (!row) {
     return undefined;
@@ -252,7 +252,7 @@ const getMetadata = (db: sqlite3.Database, name: string) => {
   return row.value as string;
 };
 
-const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number) => {
+const setBoundsCenter = (db: Database, minzoom: number, maxzoom: number) => {
   const row = db.prepare(`
     SELECT MAX(tile_column) AS maxx,
     MIN(tile_column) AS minx, MAX(tile_row) AS maxy,
@@ -280,7 +280,7 @@ const setBoundsCenter = (db: sqlite3.Database, minzoom: number, maxzoom: number)
 }
 
 type ProcessorCtx = {
-  db: sqlite3.Database;
+  db: Database;
   id: string;
   gsiId: string;
   minZoom: number;
@@ -376,3 +376,28 @@ async function processor(id: string, meta: TilesetSpec, output: string): Promise
 }
 
 export default processor;
+
+export {
+  initDb,
+  verifyTilesetMetadata,
+  mokurokuUniqueTiles,
+  writeMetadata,
+  getMetadata,
+  setBoundsCenter,
+  checkImageTile,
+  putTileImageData,
+  insertTileRef,
+  syncTileRefTable,
+  deleteUnusedTiles,
+  getMokuroku,
+  getTileData,
+  syncImagesTable,
+};
+export type { MokurokuRow, MokurokuArray, MokurokuResp, ProcessorCtx, ProcessorResult };
+
+/** テスト用：モジュールレベルのキャッシュされたprepared statementをリセットする */
+export function _resetPreparedStatements() {
+  _preparedImageTileQuery = undefined;
+  _preparedInsertTileDataQuery = undefined;
+  _preparedInsertTileRefQuery = undefined;
+}
